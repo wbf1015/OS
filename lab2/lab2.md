@@ -1,5 +1,7 @@
 LAB2实验说明：
 
+这篇报告将指导手册上的知识平摊到了每一个实验的具体流程中，可能会便于大家定位知识的用途到底在哪里。
+
 实验一、default_pmm.c
 
 在这个实验中主要是要完成一个first-fit算法的实现，这个算法的大体含义就是用一个双向链表维护很多空闲块，并且返回第一个找到的可以满足要求的空闲块，所谓的满足要求就是这个空闲块的物理内存的大小比需要的内存大小要大就可以。
@@ -16,9 +18,9 @@ typedef struct {
 } free_area_t;
 
 //上面的list_entry_t其实是一个list_entry
-    typedef struct list_entry list_entry_t;//定义在list.h 相当于给list_entry起了个新名字
+typedef struct list_entry list_entry_t;//定义在list.h 相当于给list_entry起了个新名字
 
-//别看这里好像说明都没有，只有一个前后指针，实际上这个list_entry是一个Page的元素
+//别看这里好像说明都没有，只有一个前后指针，实际上这个list_entry是一个Page的元素，如果我们拿到了一个list_entry对象，那么就可以通过特定的函数找到其嵌入的page对象
 struct list_entry {
     struct list_entry *prev, *next; //list_entry的定义，包括一个前面的指针一个后面的指针
 };
@@ -34,9 +36,19 @@ default_init(void) {
     list_init(&free_list);  //初始化链表，让他的前后指针都指向自己
     nr_free = 0;			//还没有页数
 }
+
+//在list.h中定义
+/* *
+ * list_init - initialize a new entry
+ * @elm:        new entry to be initialized
+ * */
+static inline void
+list_init(list_entry_t *elm) {
+    elm->prev = elm->next = elm;
+}
 ```
 
-（3）default_init_memap函数：这个函数的作用就是初始化一段内存空间并把它加入到双向链表中（其实这么说可能不太准确，因为双向链表的类实际上实在page中）
+（3）default_init_memap函数：这个函数的作用就是初始化一段内存空间并把它加入到双向链表中（其实这么说可能不太准确，因为双向链表的类实际上实在page中）初始化一个块，这个块由很多页组成，注意这里的初始化和后面的alloc不是一个概念，这个初始化是将一些页变成进程可以使用的页
 
 ```c++
 static void
@@ -45,7 +57,7 @@ default_init_memmap(struct Page *base, size_t n) {//插入一个块，这个块�
     struct Page *p = base;		//base就是这些块开始的那个页
     for (; p != base + n; p ++) {
         assert(PageReserved(p));  //必须保证这些页都是被系统保留的页，下面会有专门的专题来说为什么这里必须是被系统保留的页
-        p->flags = p->property = 0; //把property都置0
+        p->flags = p->property = 0; //把property都置0，这里的property代表着这个块有多少个页（只对块的首页生效）
         set_page_ref(p, 0);     //还没有其他的页表引用这块物理内存
     }
     base->property = n;       //更改初始页的property
@@ -119,6 +131,7 @@ default_alloc_pages(size_t n) {
         if (page->property > n) {
         	//因为我们取了n页，内存块可能还有部分内存页，需要当前内存块头偏移n个`Page`位置就是
         	//内存块剩下的页组成新的内存块结构，新的页头描述这个小内存块
+            //p指向了那块小内存
             struct Page *p = page + n;
             p->property = page->property - n;
             SetPageProperty(p);//记得做这步，把property设为1，表示我是这个块的首页并且可以被分配
@@ -132,6 +145,7 @@ default_alloc_pages(size_t n) {
     return page;
 }
 
+//这个函数有什么用呢，就是通过一个类的一个元素来定位这个类在哪，他的实现方式是我知道这个元素相对于这个类的偏移，然后我顺着去减掉这个偏移就行了
 //le2page其实就是把list_entry变成page的函数，它也是调用了to_struct函数来完成的
 // convert list entry to page
 #define le2page(le, member)                 \
@@ -146,9 +160,13 @@ default_alloc_pages(size_t n) {
 #define to_struct(ptr, type, member)                               \
     ((type *)((char *)(ptr) - offsetof(type, member)))
 
+/* Return the offset of 'member' relative to the beginning of a struct type */
+#define offsetof(type, member)                                      \
+    ((size_t)(&((type *)0)->member))
+
 ```
 
-（5）default_free_pages函数
+（5）default_free_pages函数：注意这个free的含义，这个free的意思是，我把这块物理内存free掉，那么这代表着什么呢，代表着没有人再用这块物理内存了，这个物理内存的信息已经没用了，下一次再访问同样的空间我就不想再知道这块物理内存以前存了什么了，而是想存入新的东西，所以说，已经没有人再去ref它了，记得把他的ref清零。
 
 ```c++
 static void
@@ -167,6 +185,7 @@ default_free_pages(struct Page *base, size_t n) {
     //同样的道理，我释放了n页，那么个n页形成新的一个大一点的内存块，我们需要设置这个内存块的第一个
     //设置它后面跟了n个页并且目前可以被分配
     base->property = n;
+    //设置块首页flag为可分配的物理内存
     SetPageProperty(base);
     //遍历空闲链表，目的找到有没有地址空间是连在一起的内存块，把他们合并
     list_entry_t *le = list_next(&free_list);
@@ -196,7 +215,7 @@ default_free_pages(struct Page *base, size_t n) {
     le = list_next(&free_list);
     while (le != &free_list) {
         p = le2page(le, page_link);
-        if (base + base->property <= p) {
+        if (base + base->property <= p) {//需要注意到的是page是一个指针，所以可以以其存在的虚拟地址表征其代表的物理地址
             //必须保证不能合并的
             assert(base + base->property != p);
             break;
@@ -226,18 +245,34 @@ list_add_before(list_entry_t *listelm, list_entry_t *elm) {
 这个实验要干的一件事就是我给你一个虚拟地址，你把这个虚拟地址对应的二级页表项拿出来，如果这个虚拟地址还不存在一个二级页表那就分配一个。
 
 ```C++
-pde_t *pdep = &pgdir[PDX(la)];
-    if (!(*pdep & PTE_P)) {
+pde_t *pdep = &pgdir[PDX(la)];//首先我拿到一个页目录项，这个页目录项的来源就是我用虚拟地址做索引在页目录表中找到的一个地址
+    if (!(*pdep & PTE_P)) {//如果说这个地址的内容和PTE_P相与不为1，那么我就要为其分配一个页
         struct Page *page;
-        if (!create || (page = alloc_page()) == NULL) {
+        if (!create || (page = alloc_page()) == NULL) {//为page分配空间，这个page是一个新的二级页表
             return NULL;
         }
-        set_page_ref(page, 1);
-        uintptr_t pa = page2pa(page);
-        memset(KADDR(pa), 0, PGSIZE);
-        *pdep = pa | PTE_U | PTE_W | PTE_P;
+        set_page_ref(page, 1);//这个二级页表目前被页目录表（一级页表）索引
+        uintptr_t pa = page2pa(page);//拿到代表这个页所管理的物理地址
+        memset(KADDR(pa), 0, PGSIZE);//把对应物理地址内容都置零
+        *pdep = pa | PTE_U | PTE_W | PTE_P;//变为存在 用户可用 可写，注意看家人们，对应的页目录项存储的是二级页表的物理地址！！！！
     }
-    return &((pte_t *)KADDR(PDE_ADDR(*pdep)))[PTX(la)];
+    return &((pte_t *)KADDR(PDE_ADDR(*pdep)))[PTX(la)];//返回对应的页目录项
+
+
+//标志位定义
+/* page table/directory entry flags */
+#define PTE_P           0x001                   // Present
+#define PTE_W           0x002                   // Writeable
+#define PTE_U           0x004                   // User
+#define PTE_PWT         0x008                   // Write-Through
+#define PTE_PCD         0x010                   // Cache-Disable
+#define PTE_A           0x020                   // Accessed
+#define PTE_D           0x040                   // Dirty
+#define PTE_PS          0x080                   // Page Size
+#define PTE_MBZ         0x180                   // Bits must be zero
+#define PTE_AVAIL       0xE00                   // Available for software use
+                                                // The PTE_AVAIL bits aren't used by the kernel or interpreted by the
+                                                // hardware, so user processes are allowed to set them arbitrarily（任意）.
 ```
 
 (1) pde_t*是什么
@@ -356,6 +391,14 @@ pages = (struct Page *)ROUNDUP((void *)end, PGSIZE);
 #define KERNBASE            0xC0000000
 
 //如果看过实验指导书到这里应该就不陌生了，这是说明东西呢？就是ucore中虚拟地址和物理地址的映射关系，具体可以查看实验指导书第162页
+//看一下这玩意具体都是怎么实现的
+// page number field of address
+//PPN函数：把一个虚拟地址右移12位
+#define PPN(la) (((uintptr_t)(la)) >> PTXSHIFT)
+#define PTXSHIFT        12                      // offset of PTX in a linear address
+//npage的定义：代表了总共会有多少个页
+npage = maxpa / PGSIZE;
+//那么很明显了，如果你右移之后的这个数比最多的页数还要多，那么只有一种可能就是你给的地址就不对
 ```
 
 （6）PTE_U PTE_W PTE_P是什么
@@ -388,7 +431,7 @@ pages = (struct Page *)ROUNDUP((void *)end, PGSIZE);
 
 ```c++
 if (*ptep & PTE_P) {
-        struct Page *page = pte2page(*ptep);
+        struct Page *page = pte2page(*ptep);//调用了使用pt找到page结构
         if (page_ref_dec(page) == 0) {
             free_page(page);
         }
@@ -400,13 +443,21 @@ if (*ptep & PTE_P) {
 （1）pte2page是什么
 
 ```c++
-//定义在pmm.h中，最后也是反悔了这个PTE_ADDR,在实验二中涉及到了，就是返回了页目录项或者页表的入口地址，也就是把低12位置零。
+//定义在pmm.h中，最后返回了pte对应的物理地址的Page结构
 static inline struct Page *
-pte2page(pte_t pte) {
+pte2page(pte_t pte) {//首先输入进来的是一个二级页表项本身，也就是一个物理地址，或者理解成一个指针，指向了一个物理地址
     if (!(pte & PTE_P)) {
         panic("pte2page called with invalid pte");
     }
-    return pa2page(PTE_ADDR(pte));
+    return pa2page(PTE_ADDR(pte));//PTE_ADDR的作用是把后12位清零，这样就找到了一个完整的页框的开头位置，是一个物理地址
+}
+
+static inline struct Page *
+pa2page(uintptr_t pa) {
+    if (PPN(pa) >= npage) {
+        panic("pa2page called with invalid pa");
+    }
+    return &pages[PPN(pa)];//PPN的作用是右移12位，用它作为page指针的索引即可
 }
 ```
 
@@ -573,7 +624,7 @@ struct e820map *memmap = (struct e820map *)(0x8000 + KERNBASE);
     extern char end[];
 //算一下要管理这么大的空闲需要多少页
     npage = maxpa / PGSIZE;
-    pages = (struct Page *)ROUNDUP((void *)end, PGSIZE);
+    pages = (struct Page *)ROUNDUP((void *)end, PGSIZE);//这里pages是虚拟地址
 //然后把所有操作系统能管的内存全部置成reserved
 //到这里似乎能够回答那个问题了，看吧，所有操作系统能用的页全都被置成reserved了，所以你在分配它的时候才要把他解开。
     for (i = 0; i < npage; i ++) {
@@ -741,6 +792,7 @@ static struct Page*
 buddy_get_buddy(struct Page *page) {
     //有多少个页
     unsigned int order = page->property;//拿到阶数
+    //这里注意，firstppn也是要从pages开始的，因为ppn其实也是可以给进程能分配的第一个块的地址
     unsigned int buddy_ppn = first_ppn + ((1 << order) ^ (page2ppn(page) - first_ppn));//我觉得可以姑且理解为拿到他的buddy_ppn相对于pages的偏移是多少
     cprintf("[!]BS: Page NO.%d 's buddy page on order %d is: %d\n", page2ppn(page), order, buddy_ppn);
     if (buddy_ppn > page2ppn(page)) {//buddy的首page在free的首page之后
