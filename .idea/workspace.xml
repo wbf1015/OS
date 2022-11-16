@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ChangeListManager">
+    <list default="true" id="663096d8-9feb-43c3-9142-3a17e119ebd0" name="变更" comment="">
+      <change beforePath="$PROJECT_DIR$/lab1/LAB1实验报告.md" beforeDir="false" afterPath="$PROJECT_DIR$/lab1/LAB1实验报告.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/lab2/lab2.md" beforeDir="false" afterPath="$PROJECT_DIR$/lab2/lab2.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/bootloader/rustsbi-qemu.bin" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/bootloader/rustsbi-qemu.bin" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes/autobuild.sh" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes/autobuild.sh" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes/autotest.sh" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes/autotest.sh" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes/clangbuildall.sh" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes/clangbuildall.sh" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes/cleanall.sh" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes/cleanall.sh" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes/gccbuildall.sh" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes/gccbuildall.sh" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/cleanall.sh" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/cleanall.sh" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/gccbuildall.sh" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/gccbuildall.sh" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/kern/fs/devs/dev.c" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/kern/fs/devs/dev.c" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/kern/fs/devs/dev.h" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/kern/fs/devs/dev.h" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/kern/fs/devs/dev_disk0.c" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/kern/fs/devs/dev_disk0.c" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/kern/fs/devs/dev_stdin.c" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/kern/fs/devs/dev_stdin.c" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/kern/fs/devs/dev_stdout.c" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/kern/fs/devs/dev_stdout.c" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/kern/fs/file.c" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/kern/fs/file.c" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/kern/fs/file.h" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/kern/fs/file.h" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/kern/fs/fs.c" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/kern/fs/fs.c" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/kern/fs/fs.h" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/kern/fs/fs.h" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/kern/fs/iobuf.c" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/kern/fs/iobuf.c" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/kern/fs/iobuf.h" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/kern/fs/iobuf.h" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/kern/fs/sfs/bitmap.c" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/kern/fs/sfs/bitmap.c" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/kern/fs/sfs/bitmap.h" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/kern/fs/sfs/bitmap.h" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/kern/fs/sfs/sfs.c" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/kern/fs/sfs/sfs.c" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/kern/fs/sfs/sfs.h" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/kern/fs/sfs/sfs.h" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/kern/fs/sfs/sfs_fs.c" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/kern/fs/sfs/sfs_fs.c" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/kern/fs/sfs/sfs_inode.c" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/kern/fs/sfs/sfs_inode.c" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/kern/fs/sfs/sfs_io.c" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/kern/fs/sfs/sfs_io.c" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/kern/fs/sfs/sfs_lock.c" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/kern/fs/sfs/sfs_lock.c" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/kern/fs/swap/swapfs.c" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/kern/fs/swap/swapfs.c" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/kern/fs/swap/swapfs.h" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/kern/fs/swap/swapfs.h" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/kern/fs/sysfile.c" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/kern/fs/sysfile.c" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/kern/fs/sysfile.h" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/kern/fs/sysfile.h" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/kern/fs/vfs/inode.c" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/kern/fs/vfs/inode.c" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/kern/fs/vfs/inode.h" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/kern/fs/vfs/inode.h" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/kern/fs/vfs/vfs.c" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/kern/fs/vfs/vfs.c" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/kern/fs/vfs/vfs.h" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/kern/fs/vfs/vfs.h" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/kern/fs/vfs/vfsdev.c" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/kern/fs/vfs/vfsdev.c" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/kern/fs/vfs/vfsfile.c" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/kern/fs/vfs/vfsfile.c" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/kern/fs/vfs/vfslookup.c" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/kern/fs/vfs/vfslookup.c" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/kern/fs/vfs/vfspath.c" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/kern/fs/vfs/vfspath.c" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/libs/dirent.h" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/libs/dirent.h" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/user/ls.c" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/user/ls.c" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/user/sh.c" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/labcodes_answer/lab8_result/user/sh.c" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/related_info/lab3/page-replacement-policy.py" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/related_info/lab3/page-replacement-policy.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/related_info/lab4/process-concept-homework.py" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/related_info/lab4/process-concept-homework.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/related_info/lab4/some-exercises/build-2.sh" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/related_info/lab4/some-exercises/build-2.sh" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/related_info/lab4/some-exercises/build.sh" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/related_info/lab4/some-exercises/build.sh" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/related_info/lab5/process-cpuio-homework.py" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/related_info/lab5/process-cpuio-homework.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/related_info/lab6/scheduler-homework.py" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/related_info/lab6/scheduler-homework.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/related_info/lab7/race-condition/x86.py" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/related_info/lab7/race-condition/x86.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/related_info/lab7/software-hardware-locks/x86.py" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/related_info/lab7/software-hardware-locks/x86.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/related_info/lab8/disksim-homework.py" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/related_info/lab8/disksim-homework.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/related_info/lab8/sfs-homework.py" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/related_info/lab8/sfs-homework.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/related_info/ostep/ostep10-lottery.py" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/related_info/ostep/ostep10-lottery.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/related_info/ostep/ostep11-threadintro/x86.py" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/related_info/ostep/ostep11-threadintro/x86.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/related_info/ostep/ostep12-threadlock/x86.py" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/related_info/ostep/ostep12-threadlock/x86.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/related_info/ostep/ostep13-vsfs.py" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/related_info/ostep/ostep13-vsfs.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/related_info/ostep/ostep15-disk/disk-precise.py" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/related_info/ostep/ostep15-disk/disk-precise.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/related_info/ostep/ostep15-disk/disk.py" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/related_info/ostep/ostep15-disk/disk.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/related_info/ostep/ostep16-raid.py" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/related_info/ostep/ostep16-raid.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/related_info/ostep/ostep2-segmentation.py" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/related_info/ostep/ostep2-segmentation.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/related_info/ostep/ostep3-malloc.py" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/related_info/ostep/ostep3-malloc.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/related_info/ostep/ostep4-paging-linear-translate.py" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/related_info/ostep/ostep4-paging-linear-translate.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/related_info/ostep/ostep5-paging-multilevel-translate.py" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/related_info/ostep/ostep5-paging-multilevel-translate.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/related_info/ostep/ostep6-paging-policy.py" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/related_info/ostep/ostep6-paging-policy.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/related_info/ostep/ostep7-process-run.py" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/related_info/ostep/ostep7-process-run.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/related_info/ostep/ostep8-scheduler.py" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/related_info/ostep/ostep8-scheduler.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/related_info/ostep/ostep9-mlfq.py" beforeDir="false" afterPath="$PROJECT_DIR$/实验代码/os_kernel_lab/os_kernel_lab/related_info/ostep/ostep9-mlfq.py" afterDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="MarkdownSettingsMigration">
+    <option name="stateVersion" value="1" />
+  </component>
+  <component name="ProjectId" id="2HdAZU4sXuFi4PNjzTXIPWDsQr7" />
+  <component name="ProjectLevelVcsManager" settingsEditedManually="true" />
+  <component name="ProjectViewState">
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent">
+    <property name="RunOnceActivity.OpenProjectViewOnStart" value="true" />
+    <property name="RunOnceActivity.ShowReadmeOnStart" value="true" />
+  </component>
+  <component name="SpellCheckerSettings" RuntimeDictionaries="0" Folders="0" CustomDictionaries="0" DefaultDictionary="应用程序级" UseSingleDictionary="true" transferred="true" />
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="默认任务">
+      <changelist id="663096d8-9feb-43c3-9142-3a17e119ebd0" name="变更" comment="" />
+      <created>1668604644087</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1668604644087</updated>
+    </task>
+    <servers />
+  </component>
+</project>
