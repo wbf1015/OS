@@ -2,6 +2,8 @@ LAB3练习一
 
 看着还不错的blog：https://www.cnblogs.com/xiaoxiongcanguan/p/13854711.html
 
+在合并Lab2时需要将init.c中的   //lab1_switch_test();注释掉否则会跑不出100ticks只能拿到40/45分
+
 总体思路（主要内容为复制实验指导书）
 
 本次实验主要完成ucore内核对虚拟内存的管理工作。其总体设计思路还是比较简单，即：
@@ -624,7 +626,7 @@ _fifo_map_swappable(struct mm_struct *mm, uintptr_t addr, struct Page *page, int
     //record the page access situlation
     /*LAB3 EXERCISE 2: YOUR CODE*/ 
     //(1)link the most recent arrival page at the back of the pra_list_head qeueue.
-    list_add(head, entry);
+    list_add(head, entry);//把最近使用的加入到head-->next
     return 0;
 }
 /*
@@ -641,7 +643,7 @@ _fifo_swap_out_victim(struct mm_struct *mm, struct Page ** ptr_page, int in_tick
      /*LAB3 EXERCISE 2: YOUR CODE*/ 
      //(1)  unlink the  earliest arrival page in front of pra_list_head qeueue
      //(2)  assign the value of *ptr_page to the addr of this page
-     list_entry_t *le=head->prev;
+     list_entry_t *le=head->prev;//找的时候和插的时候对应相反，这里需要去head-->prev里面找
      assert(head!=le);
      struct Page *p=le2page(le,pra_page_link);
      list_del(le);
@@ -649,5 +651,95 @@ _fifo_swap_out_victim(struct mm_struct *mm, struct Page ** ptr_page, int in_tick
      return 0;
 }
 
+```
+
+
+
+challenge：
+
+在challenge中实际上是对简单的fifo算法进行了改进，当然，始终算法也分为两种，一种是最简单时钟，就是实验文档里给出的第一种时钟：简而言之就是如果一个页在近期被访问过，就把他的标识位置位为1，当需要替换页的时候，时钟一开始指向的是最先进来的页面，然后循环向后寻找，直到找到一个标识位为0的页面，并且当时钟扫过一个页面时需要将其标识位置0，所以如果所有页都被访问过则驱逐最早进来的页
+
+时钟（Clock）页替换算法：是LRU算法的一种近似实现。时钟页替换算法把各个页面组织成环形链表的形式，类似于一个钟的表面。然后把一个指针（简称当前指针）指向最老的那个页面，即最先进来的那个页面。另外，时钟算法需要在页表项（PTE）中设置了一位访问位来表示此页表项对应的页当前是否被访问过。**当该页被访问时，CPU中的MMU硬件将把访问位置“1”。**当操作系统需要淘汰页时，对当前指针指向的页所对应的页表项进行查询，**如果访问位为“0”，则淘汰该页，**如果该页被写过，则还要把它换出到硬盘上；**如果访问位为“1”，则将该页表项的此位置“0”，继续访问下一个页。**该算法近似地体现了LRU的思想，且易于实现，开销少，需要硬件支持来设置访问位。时钟页替换算法在本质上与FIFO算法是类似的，不同之处是在时钟页替换算法中跳过了访问位为1的页。
+
+当然，上面的这个算法也是比较low的，所以实验指导手册还提供了一个进阶的时钟算法
+
+简单而言就是替换的时候如果你替换一个已经修改过的页面回磁盘就还要承担相应的写盘时间，这个时间是非常恐怖的，所以我们应该尽量也保证不把修改过的页进行替换
+
+黄逸轩同学总结的非常到位了：
+
+- (0,0): 最近未使用也未被修改，首先选择淘汰此页
+- (0,1): 最近未使用但被修改，其次选择淘汰此页
+- (1,0): 最近使用但未被修改，再次选择淘汰此页
+- (1,1): 最近未使用也未被修改，最后才选择淘汰此页
+
+同样，查找的时候秉承三次循环的原则来完成，具体的算法如下：
+
+- 第一次遍历链表查找 ，同时重置每一页的PTE_A（设置为未使用），为第二次遍历的条件进行铺垫
+- 第二次遍历链表查找 ，同时重置每一页的PTE_D（设置为未修改），为第三次遍历的条件进行铺垫
+- 第三次遍历链表查找，则肯定能找到未使用未修改的页
+
+原文粘贴在下面了：
+
+- 改进的时钟（Enhanced Clock）页替换算法：在时钟置换算法中，淘汰一个页面时只考虑了页面是否被访问过，但在实际情况中，还应考虑被淘汰的页面是否被修改过。因为淘汰修改过的页面还需要写回硬盘，使得其置换代价大于未修改过的页面，所以优先淘汰没有修改的页，减少磁盘操作次数。**改进的时钟置换算法除了考虑页面的访问情况，还需考虑页面的修改情况。**即该算法不但希望淘汰的页面是最近未使用的页，而且还希望被淘汰的页是在主存驻留期间其页面内容未被修改过的。**这需要为每一页的对应页表项内容中增加一位引用位和一位修改位。**当该页被访问时，CPU中的MMU硬件将把访问位置“1”。当该页被“写”时，CPU中的MMU硬件将把修改位置“1”。这样这两位就存在四种可能的组合情况：（0，0）表示最近未被引用也未被修改，首先选择此页淘汰；（0，1）最近未被使用，但被修改，其次选择；（1，0）最近使用而未修改，再次选择；（1，1）最近使用且修改，最后选择。该算法与时钟算法相比，可进一步减少磁盘的I/O操作次数，但为了查找到一个尽可能适合淘汰的页面，可能需要经过多次扫描，增加了算法本身的执行开销。
+
+
+
+challenge的原理并不难，我们来看一下如何编写对应的代码：
+
+具体的思路也比较哦清晰，就是我一次一次的扩大范围，那么总有一次是可以找到一个页供我替换的
+
+```c++
+static int
+_extend_clock_swap_out_victim(struct mm_struct *mm, struct Page ** ptr_page, int in_tick)
+{
+	//这几行和FIFO一样
+    list_entry_t *head=(list_entry_t*) mm->sm_priv;
+        assert(head != NULL);
+    assert(in_tick==0);
+
+    // 三次遍历查找可换出的页
+    for(int i = 0; i < 3; i++)
+    {
+        list_entry_t *le = head->prev;
+        assert(head!=le);
+        while(le != head)
+        {
+            struct Page *p = le2page(le, pra_page_link);//拿到链表中对应的物理地址对应的物理页的Page结构
+            pte_t* ptep = get_pte(mm->pgdir, p->pra_vaddr, 0);//通过va找到其对应的pte
+            // 如果未使用且未修改，则直接分配
+            if(!(*ptep & PTE_A) && !(*ptep & PTE_D))//如果是两个零的情况（未使用未修改，直接驱逐，return）
+            {
+                list_del(le);
+                assert(p !=NULL);
+                *ptr_page = p;
+                return 0;
+            }
+            // 如果在第一次查找中，访问到了一个已经使用过的PTE，则标记为未使用。
+            if(i == 0)
+                *ptep &= ~PTE_A;
+            // 如果在第二次查找中，访问到了一个已修改过的PTE，则标记为未修改。
+            else if(i == 1)
+                *ptep &= ~PTE_D;
+
+            le = le->prev;
+            // 遍历了一回，肯定修改了标志位，所以要刷新TLB
+            tlb_invalidate(mm->pgdir, le);
+        }
+    }
+    // 按照前面的assert与if，不可能会执行到此处，所以return -1
+    return -1;
+}
+
+struct swap_manager swap_manager_fifo =
+{
+     .name            = "extend_clock swap manager",
+     .init            = &_fifo_init,
+     .init_mm         = &_fifo_init_mm,
+     .tick_event      = &_fifo_tick_event,
+     .map_swappable   = &_fifo_map_swappable,
+     .set_unswappable = &_fifo_set_unswappable,
+     .swap_out_victim = &_extend_clock_swap_out_victim,
+     .check_swap      = &_fifo_check_swap,
+};
 ```
 
