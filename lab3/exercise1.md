@@ -88,7 +88,7 @@ struct mm_struct {
     struct vma_struct *mmap_cache; // current accessed vma, used for speed purpose
     pde_t *pgdir;                  // the PDT of these vma
     int map_count;                 // the count of these vma
-    void *sm_priv;                   // the private data for swap manager
+    void *sm_priv;                 // the private data for swap manager
 };
 ```
 
@@ -112,7 +112,7 @@ struct mm_struct {
 
 当出现上面情况之一，那么就会产生页面page fault（#PF）异常。**CPU会把产生异常的线性地址存储在CR2中，并且把表示页访问异常类型的值（简称页访问异常错误码，errorCode）保存在中断栈中。**
 
-页访问异常错误码（errorcode）有32位。位0为１表示对应物理页不存在；位１为１表示写异常（比如写了只读页；位２为１表示访问权限异常（比如用户态程序访问内核空间的数据）也就分别代表了上面说的三种页访问异常出现的原因。
+页访问异常错误码（errorcode）有32位。位0为0表示对应物理页不存在（这里实验手册写反了）；位１为１表示写异常（比如写了只读页；位２为１表示访问权限异常（比如用户态程序访问内核空间的数据）也就分别代表了上面说的三种页访问异常出现的原因。
 
 CR2是页故障线性地址寄存器，**保存最后一次出现页故障的全32位线性地址**。CR2用于发生页异常时报告出错信息。当发生页异常时，处理器把**引起页异常的线性地址保存在CR2中。**操作系统中对应的中断服务例程可以检查CR2的内容，从而**查出线性地址空间中的哪个页引起本次异常。**
 
@@ -183,15 +183,18 @@ do_pgfault(struct mm_struct *mm, uint32_t error_code, uintptr_t addr) {
     default:
             /* error code flag : default is 3 ( W/R=1, P=1): write, present */
             //访问的物理页存在，且发生了写异常（写了只读页）
+            //但在这种情况下根本就不应该来这里，所以找个机会把他踢出去
     case 2: /* error code flag : (W/R=1, P=0): write, not present */
             //访问的映射页表项不存在、且发生的是写异常
-        if (!(vma->vm_flags & VM_WRITE)) {//对应的vma块映射的虚拟内存空间是不可写的,权限校验失败
+            //到这里来的话就有可能是正确的
+        if (!(vma->vm_flags & VM_WRITE)) {//对应的vma块映射的虚拟内存空间是不可写的,权限校验失败（想写但不能写）
             cprintf("do_pgfault failed: error code flag = write AND not present, but the addr's vma cannot write\n");
             goto failed;
         }
         break;
     case 1: /* error code flag : (W/R=0, P=1): read, present */
             //bit0为1，bit1为0，访问的映射页表项存在，且发生的是读异常(可能是访问权限异常)
+            //根本就不符合这里的代码准入条件，让他挂掉
         cprintf("do_pgfault failed: error code flag = read AND present\n");
         goto failed;
     case 0: /* error code flag : (W/R=0, P=0): read, not present */
