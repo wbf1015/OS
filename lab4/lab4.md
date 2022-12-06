@@ -1,0 +1,635 @@
+LAB4 内核进程管理
+
+第一部分：入门阶段，这部分基本是照抄的实验指导书。
+
+对CPU的分时复用：
+
+当一个程序加载到内存中运行时，首先通过ucore OS的内存管理子系统分配合适的空间，然后就需要考虑如何分时使用CPU来“并发”执行多个程序，让每个运行的程序（这里用线程或进程表示）“感到”它们各自拥有“自己”的CPU。
+
+在本次实验中接触到的是内核线程的管理，首选对内核线程进行学习了解：
+
+内核线程是一种特殊的进程，内核线程与用户进程的区别有两个：（1）内核线程只运行在内核态，但是用户进程会在在用户态和内核态交替运行。（2）所有内核线程共用ucore内核内存空间，不需为每个内核线程维护单独的内存空间，而用户进程需要维护各自的用户内存空间
+
+入门阶段之实验流程概述：
+
+从内存空间占用情况这个角度上看，我们可以**把线程看作是一种共享内存空间的轻量级进程。**
+
+为了实现内核线程，需要**设计管理线程的数据结构**，即**进程控制块**（在这里也可叫做线程控制块）。如果要让内核线程运行，我们首先要创建内核线程对应的进程控制块，还**需把这些进程控制块通过链表连在一起**，便于随时进行插入，删除和查找操作等进程管理事务。这个链表就是进程控制块链表。然后在**通过调度器（scheduler）来让不同的内核线程在不同的时间段占用CPU执行，实现对CPU的分时共享**
+
+在kern_init函数中，当完成虚拟内存的初始化工作后，就调用了proc_init函数，这个函数完成了idleproc内核线程和initproc内核线程的创建或复制工作，这也是本次实验要完成的练习。**idleproc内核线程的工作就是不停地查询，看是否有其他内核线程可以执行了**，如果有，马上让调度器选择那个内核线程执行（请参考cpu_idle函数的实现）。**所以idleproc内核线程是在ucore操作系统没有其他内核线程可执行的情况下才会被调用**。接着就是调用kernel_thread函数来创建initproc内核线程。initproc内核线程的工作就是显示“Hello World”，表明自己存在且能正常工作了。
+
+调度器会在特定的调度点上执行调度，完成进程切换。**在lab4中，这个调度点就一处，即在cpu_idle函数中**，此函数如果发现**当前进程（也就是idleproc）的need_resched置为1**（在初始化idleproc的进程控制块时就置为1了），则调用schedule函数，完成进程调度和进程切换。进程调度的过程其实比较简单，就是在进程控制块链表中查找到一个“合适”的内核线程，**所谓“合适”就是指内核线程处于“PROC_RUNNABLE”状态**。在接下来的**switch_to函数(在后续有详细分析，有一定难度，需深入了解一下)完成具体的进程切换过程**。一旦切换成功，那么initproc内核线程就可以通过显示字符串来表明本次实验成功。
+
+第二部分：涉及实验
+
+首先，和Lab3很像，我们首先介绍一个非常重要的数据结构：进程控制块
+
+```c++
+struct proc_struct {
+    enum proc_state state;                      // Process state 状态
+    int pid;                                    // Process ID 进程ID
+    int runs;                                   // the running times of Proces 执行了几次
+    uintptr_t kstack;                           // Process kernel stack 栈的地址
+    volatile bool need_resched;                 // bool value: need to be rescheduled to release CPU? 为1则进行进程调度
+    struct proc_struct *parent;                 // the parent process 父进程
+    struct mm_struct *mm;                       // Process's memory management field mm结构
+    struct context context;                     // Switch here to run process 上下文
+    struct trapframe *tf;                       // Trap frame for current interrupt 当前中断的frame
+    uintptr_t cr3;                              // CR3 register: the base addr of Page Directroy Table(PDT)
+    uint32_t flags;                             // Process flag
+    char name[PROC_NAME_LEN + 1];               // Process name
+    list_entry_t list_link;                     // Process link list 
+    list_entry_t hash_link;                     // Process hash list
+};
+extern struct proc_struct *idleproc, *initproc, *current;
+```
+
+根据实验手册的顺序介绍一下里面的重要成员变量：
+
+● mm：**内存管理的信息**，包括内存映射列表、页表指针等。mm成员变量在lab3中用于虚存管理。但在实际OS中，**内核线程常驻内存，不需要考虑swap page问题**，在lab5中涉及到了用户进程，才考虑进程用户内存空间的swap page问题，mm才会发挥作用。所以在lab4中mm对于内核线程就没有用了，这样内核线程的proc_struct的成员变量mm=0是合理的。mm里有个很重要的项pgdir，记录的是该进程使用的一级页表的物理地址。由于*mm=NULL，所以在proc_struct数据结构中需要有一个代替pgdir项来记录页表起始地址，这就是proc_struct数据结构中的cr3成员变量。
+
+```C++
+//以防忘记，把Lab3中的mm_struct粘贴过来了，可以回忆一下
+struct mm_struct {
+    list_entry_t mmap_list;        // linear list link which sorted by start addr of vma
+    struct vma_struct *mmap_cache; // current accessed vma, used for speed purpose
+    pde_t *pgdir;                  // the PDT of these vma
+    int map_count;                 // the count of these vma
+    void *sm_priv;                 // the private data for swap manager
+};
+```
+
+也就是说，在Lab4中mm没有用，他被置为零，因为内核线程不可能被换到硬盘中，他永远在内存中。但是进程在做地址转换的时候需要一个指向一级页表物理地址的指针，本来这个东西在mm中提供，但由于内核进程没有，所以由cr3代替。
+
+● state：进程所处的状态。进程的状态信息同样定义在proc.h中，他是一个枚举类型，总共有四种可能：未初始化、休眠、就绪、濒死
+
+```c++
+// process's state in his life cycle
+enum proc_state {
+    PROC_UNINIT = 0,  // uninitialized
+    PROC_SLEEPING,    // sleeping
+    PROC_RUNNABLE,    // runnable(maybe running)
+    PROC_ZOMBIE,      // almost dead, and wait parent proc to reclaim（回收） his resource
+};
+```
+
+● parent：用户进程的父进程（创建它的进程）。在所有进程中，只有一个进程没有父进程，就是内核创建的第一个内核线程idleproc。内核根据这个父子关系建立一个树形结构，用于维护一些特殊的操作，例如确定某个进程是否可以对另外一个进程进行某种操作等等。
+
+idleproc内核线程的工作就是不停地查询，看是否有其他内核线程可以执行了，如果有，马上让调度器选择那个内核线程执行
+
+● context：进程的上下文，用于进程切换（参见switch.S）。在 uCore中，所有的进程在内核中也是相对独立的（例如独立的内核堆栈以及上下文等等）。**使用 context 保存寄存器的目的就在于在内核态中能够进行上下文之间的切换。**实际利用context进行上下文切换的函数是在kern/process/switch.S中定义switch_to。（这个地方不太懂，后面还要重点问、重点看）
+
+```c++
+//不用保存所有的寄存器因为段寄存器在内核上下文中是一样的，保存通用寄存器这样就不用关心调用者保存这样的约束，但是不保存eax，因为这会简化切换上下文的工作。
+// Saved registers for kernel context switches.
+// Don't need to save all the %fs etc. segment registers,
+// because they are constant across kernel contexts.
+// Save all the regular registers so we don't need to care
+// which are caller save, but not the return register %eax.
+// (Not saving %eax just simplifies the switching code.)
+// The layout of context must match code in switch.S.
+struct context {
+    uint32_t eip;
+    uint32_t esp;
+    uint32_t ebx;
+    uint32_t ecx;
+    uint32_t edx;
+    uint32_t esi;
+    uint32_t edi;
+    uint32_t ebp;
+};
+```
+
+switch_to代码：
+
+```c++
+.text
+.globl switch_to
+switch_to:                      # switch_to(from, to)
+
+    # save from's registers
+    movl 4(%esp), %eax          # eax points to from
+    popl 0(%eax)                # save eip !popl
+    movl %esp, 4(%eax)
+    movl %ebx, 8(%eax)
+    movl %ecx, 12(%eax)
+    movl %edx, 16(%eax)
+    movl %esi, 20(%eax)
+    movl %edi, 24(%eax)
+    movl %ebp, 28(%eax)
+
+    # restore to's registers
+    movl 4(%esp), %eax          # not 8(%esp): popped return address already
+                                # eax now points to to
+    movl 28(%eax), %ebp
+    movl 24(%eax), %edi
+    movl 20(%eax), %esi
+    movl 16(%eax), %edx
+    movl 12(%eax), %ecx
+    movl 8(%eax), %ebx
+    movl 4(%eax), %esp
+
+    pushl 0(%eax)               # push eip
+
+    ret
+
+
+```
+
+● tf：中断帧的指针，总是指向内核栈的某个位置：当进程从用户空间跳到内核空间时，**中断帧记录了进程在被中断前的状态。**当内核需要跳回用户空间时，需要调整中断帧以恢复让进程继续执行的各寄存器值。除此之外，uCore内核允许嵌套中断。因此为了保证嵌套中断发生时tf 总是能够指向当前的trapframe，**uCore 在内核栈上维护了 tf 的链，可以参考trap.c::trap函数做进一步的了解。**（不知道这个是在哪里维护的）
+
+放一下trap.c中的代码：
+
+```c++
+static void
+trap_dispatch(struct trapframe *tf) {
+    char c;
+
+    int ret;
+
+    switch (tf->tf_trapno) {
+    case T_PGFLT:  //page fault
+        if ((ret = pgfault_handler(tf)) != 0) {
+            print_trapframe(tf);
+            panic("handle pgfault failed. %e\n", ret);
+        }
+        break;
+    case IRQ_OFFSET + IRQ_TIMER:
+#if 0
+    LAB3 : If some page replacement algorithm(such as CLOCK PRA) need tick to change the priority of pages, 
+    then you can add code here. 
+#endif
+        /* LAB1 YOUR CODE : STEP 3 */
+        /* handle the timer interrupt */
+        /* (1) After a timer interrupt, you should record this event using a global variable (increase it), such as ticks in kern/driver/clock.c
+         * (2) Every TICK_NUM cycle, you can print some info using a funciton, such as print_ticks().
+         * (3) Too Simple? Yes, I think so!
+         */
+        ticks ++;
+        if (ticks % TICK_NUM == 0) {
+            print_ticks();
+        }
+        break;
+    case IRQ_OFFSET + IRQ_COM1:
+        c = cons_getc();
+        cprintf("serial [%03d] %c\n", c, c);
+        break;
+    case IRQ_OFFSET + IRQ_KBD:
+        c = cons_getc();
+        cprintf("kbd [%03d] %c\n", c, c);
+        break;
+    //LAB1 CHALLENGE 1 : YOUR CODE you should modify below codes.
+    case T_SWITCH_TOU:
+    case T_SWITCH_TOK:
+        panic("T_SWITCH_** ??\n");
+        break;
+    case IRQ_OFFSET + IRQ_IDE1:
+    case IRQ_OFFSET + IRQ_IDE2:
+        /* do nothing */
+        break;
+    default:
+        // in kernel, it must be a mistake
+        if ((tf->tf_cs & 3) == 0) {
+            print_trapframe(tf);
+            panic("unexpected trap in kernel.\n");
+        }
+    }
+}
+
+/* *
+ * trap - handles or dispatches an exception/interrupt. if and when trap() returns,
+ * the code in kern/trap/trapentry.S restores the old CPU state saved in the
+ * trapframe and then uses the iret instruction to return from the exception.
+ * */
+void
+trap(struct trapframe *tf) {
+    // dispatch based on what type of trap occurred
+    trap_dispatch(tf);
+}
+
+```
+
+● cr3: cr3 保存页表的物理地址，目的就是进程切换的时候方便直接使用 lcr3实现页表切换，避免每次都根据 mm 来计算 cr3。mm数据结构是用来实现用户空间的虚存管理的，但是内核线程没有用户空间，它执行的只是内核中的一小段代码（通常是一小段函数），所以它没有mm 结构，也就是NULL。**当某个进程是一个普通用户态进程的时候，PCB 中的 cr3 就是 mm中页表（pgdir）的物理地址**；而当它是内核线程的时候，**cr3 等于boot_cr3。而boot_cr3指向
+了uCore启动时建立好的饿内核虚拟空间的页目录表首地址。**
+
+● kstack:**每个线程都有一个内核栈，并且位于内核地址空间的不同位置**。**对于内核线程，该栈就是运行时的程序使用的栈；而对于普通进程，该栈是发生特权级改变的时候使保存被打断的硬件信息用的栈。**uCore在创建进程时分配了 2 个连续的物理页（参见memlayout.h中KSTACKSIZE的定义）作为内核栈的空间。这个栈很小，所以内核中的代码应该尽可能的紧凑，并且避免在栈上分配大的数据结构，以免栈溢出，导致系统崩溃。**kstack记录了分配给该进程/线程的内核栈的位置。**主要作用有以下几点。首先，**当内核准备从一个进程切换到另一个的时候**，**需要根据kstack 的值正确的设置好 tss** （可以回顾一下在实验一中讲述的 tss 在中断处理过程中的作用），以便在进程切换以后再发生中断时能够使用正确的栈。其次，内核栈位于内核地址空间，并且是不共享的（每个线程都拥有自己的内核栈），因此不受到 mm的管理，当进程退出的时候，**内核能够根据 kstack 的值快速定位栈的位置并进行回收**。uCore 的这种内核栈的设计借鉴的是 linux 的方法（但由于内存管理实现的差异，它实现的远不如 linux 的灵活），它使得每个线程的内核栈在不同的位置，这样从某种程度上方便调试，但同时也使得内核对栈溢出变得十分不敏感，因为一旦发生溢出，它极可能污染内核中其它的数据使得内核崩溃**。如果能够通过页表，将所有进程的内核栈映射到固定的地址上去，能够避免这种问题，但又会使得进程切换过程中对栈的修改变得相当繁琐。感兴趣的同学可以参考 linux kernel 的代码对此进行尝试。（所以说kstack就是一个地址，去那个地址就能找到栈）
+
+什么是TSS：[TSS (任务状态段)的作用及结构 - Gotogoo - 博客园 (cnblogs.com)](https://www.cnblogs.com/Gotogoo/p/5250622.html)
+
+1.什么是TSS
+
+　　TSS全称Task State Segment ，是操作系统在进行进程切换时保存进程现场信息的段
+
+2.TSS什么时候用，有什么用
+
+　　TSS在任务（进程）切换时起着重要的作用，通过它保存CPU中各寄存器的值，实现任务的挂起和恢复。
+
+　　比如说，当CPU执行A进程的时间片用完，要切换到B进程时，CPU会先把当前寄存器里的值保存到A进程的TSS里（任务寄存器TR指向当前进程的TSS），比如CS，EIP，ESP，标志寄存器等等，然后挂起A进程。执行B进程。这样，在CPU下次执行A进程的时候，就可以从其TSS中取出，CPU就知道上一次A进程执行到了什么位置，执行状态等等，这样就恢复了上次A进程的执行现场。
+
+![](G:\code\OS\lab4\TSS.png)
+
+● static struct proc *current：**当前占用CPU且处于“运行”状态进程控制块指针**。通常这个变量是只读的，只有在进程切换的时候才进行修改，并且整个切换和修改过程需要保证操作的原子性，目前至少需要屏蔽中断。可以参考 switch_to 的实现。
+
+● static list_entry_t hash_list[HASH_LIST_SIZE]：**所有进程控制块的哈希表**，proc_struct中的成员变量hash_link**将基于pid**链接入这个哈希表中。他的定义在proc.c中
+
+● list_entry_t proc_list：所有进程控制块的双向线性列表，proc_struct中的成员变量list_link将链接入这个链表中。他的定义也在proc.c中，都在下面的代码中给出了
+
+```c++
+// the process set's list
+list_entry_t proc_list;
+
+#define HASH_SHIFT          10
+#define HASH_LIST_SIZE      (1 << HASH_SHIFT)
+#define pid_hashfn(x)       (hash32(x, HASH_SHIFT))
+
+// has list for process set based on pid
+static list_entry_t hash_list[HASH_LIST_SIZE];
+```
+
+创建并执行内核线程：
+
+整体概览：
+
+**建立进程控制块**（proc.c中的alloc_proc函数）后，现在就可以**通过进程控制块来创建具体的进程/线程了**。首先，考虑最简单的内核线程，它通常只是内核中的一小段代码或者函数，没有自己的“专属”空间。这是由于在uCore OS启动后，已经对整个内核内存空间进行了管理，通过设置页表建立了内核虚拟空间（即boot_cr3指向的二级页表描述的空间）。**所以uCoreOS内核中的所有线程都不需要再建立各自的页表，只需共享这个内核虚拟空间就可以访问整个物理内存了**。从这个角度看，内核线程被uCore OS内核这个大“内核进程”所管理。
+
+第一个实验：
+
+首先，创建第 **0** 个内核线程 **idleproc**，内核中总是需要有一个线程是被第一个创建的，这个进程一般来说也会在OS中承担比较重要的作用。
+
+在kern_init函数调用了proc_init函数。**proc_init函数启动了创建内核线程的步骤**。首先**当前的执行上下文（从kern_init 启动至今）就可以看成是uCore内核**（也可看做是内核进程）中的一个内核线程的上下文。为此，uCore通过给当前执行的上下文分配一个进程控制块以及对它进行相应初始化，将其打造成第0个内核线程 -- idleproc。具体步骤如下：
+
+首先调用alloc_proc函数来通过kmalloc函数获得proc_struct结构的一块内存块-，作为第0个进程控制块。并把proc进行初步初始化（即把proc_struct中的各个成员变量清零）。但有些成员变量设置了特殊的值（这里是exercise1需要完成的步骤）
+
+```c++
+// alloc_proc - alloc a proc_struct and init all fields of proc_struct
+static struct proc_struct *
+alloc_proc(void) {
+    struct proc_struct *proc = kmalloc(sizeof(struct proc_struct));//kmalloc函数回头还要好好看看，总之现在就知道他分配了一个内存区域
+    if (proc != NULL) {//只要分配成功了
+    //LAB4:EXERCISE1 YOUR CODE
+    /*
+     * below fields in proc_struct need to be initialized
+     *       enum proc_state state;                      // Process state
+     *       int pid;                                    // Process ID
+     *       int runs;                                   // the running times of Proces
+     *       uintptr_t kstack;                           // Process kernel stack
+     *       volatile bool need_resched;                 // bool value: need to be rescheduled to release CPU?
+     *       struct proc_struct *parent;                 // the parent process
+     *       struct mm_struct *mm;                       // Process's memory management field
+     *       struct context context;                     // Switch here to run process
+     *       struct trapframe *tf;                       // Trap frame for current interrupt
+     *       uintptr_t cr3;                              // CR3 register: the base addr of Page Directroy Table(PDT)
+     *       uint32_t flags;                             // Process flag
+     *       char name[PROC_NAME_LEN + 1];               // Process name
+     */
+        
+     /*
+       下面的代码需要重点关注三条语句,第一条设置了进程的状态为“初始”态，这表示进程已经 “出生”了，正在获取资源茁壮成长中；第二条语句设置了进程的pid为-1，这表示进程的“身份证号”还没有办好；第三条语句表明由于该内核线程在内核中运行，故采用为uCore内核已经建立的页表，即设置为在uCore内核页表的起始地址boot_cr3。后续实验中可进一步看出所有内核线程的内核虚地址空间（也包括物理地址空间）是相同的。既然内核线程共用一个映射内核空间的页表，这表示内核空间对所有内核线程都是“可见”的，所以更精确地说，这些内核线程都应该是从属于同一个唯一的“大内核进程”—uCore内核。
+       */
+        proc->state = PROC_UNINIT;//重点关注
+        proc->pid = -1;//pid还未知
+        proc->runs = 0;
+        proc->kstack = 0;
+        proc->need_resched = 0;
+        proc->parent = NULL;
+        proc->mm = NULL;
+        memset(&(proc->context), 0, sizeof(struct context));//初始化空间
+        proc->tf = NULL;
+        proc->cr3 = boot_cr3;//共享内核空间
+        proc->flags = 0;
+        memset(proc->name, 0, PROC_NAME_LEN);//初始化空间
+    }
+    return proc;
+}
+
+```
+
+kmalloc相关函数的实现：（现在还不太明白）
+
+```c++
+//kmalloc函数的实现
+void *
+kmalloc(size_t size)
+{
+  return __kmalloc(size, 0);
+}
+
+//真正的malloc函数的实现，还没看懂
+static void *__kmalloc(size_t size, gfp_t gfp)
+{
+	slob_t *m;
+	bigblock_t *bb;
+	unsigned long flags;
+
+	if (size < PAGE_SIZE - SLOB_UNIT) {
+		m = slob_alloc(size + SLOB_UNIT, gfp, 0);
+		return m ? (void *)(m + 1) : 0;
+	}
+
+	bb = slob_alloc(sizeof(bigblock_t), gfp, 0);
+	if (!bb)
+		return 0;
+
+	bb->order = find_order(size);
+	bb->pages = (void *)__slob_get_free_pages(gfp, bb->order);
+
+	if (bb->pages) {
+		spin_lock_irqsave(&block_lock, flags);
+		bb->next = bigblocks;
+		bigblocks = bb;
+		spin_unlock_irqrestore(&block_lock, flags);
+		return bb->pages;
+	}
+
+	slob_free(bb, sizeof(bigblock_t));
+	return 0;
+}
+```
+
+proc_init函数的实现，也就是kern_init函数调用的那个用来初始化内核进程的函数
+
+```c++
+// proc_init - set up the first kernel thread idleproc "idle" by itself and 
+//           - create the second kernel thread init_main
+void
+proc_init(void) {
+    int i;
+
+    list_init(&proc_list);//进程双向链表初始化
+    for (i = 0; i < HASH_LIST_SIZE; i ++) {
+        list_init(hash_list + i); //初始化哈希表
+    }
+
+    if ((idleproc = alloc_proc()) == NULL) {//分配进程控制块
+        panic("cannot alloc idleproc.\n");
+    }
+	//在alloc_proc中对idle的进程控制块进行了一些初始化，但是那些初始化有一些不太对，还需要进一步精确：
+    /*
+    需要注意前4条语句。第一条语句给了idleproc合法的身份证号--0，这名正言顺地表明了idleproc是第0个内核线程。通常可以通过pid的赋值来表示线程的创建和身份确定。“0”是第一个的表示方法是计算机领域所特有的，比如C语言定义的第一个数组元素的小标也是“0”。第二条语句改变了idleproc的状态，使得它从“出生”转到了“准备工作”，就差uCore调度它执行了。第三条语句设置了idleproc所使用的内核栈的起始地址。需要注意以后的其他线程的内核栈都需要通过分配获得，因为uCore启动时设置的内核栈直接分配给idleproc使用了。第四条很重要，因为uCore希望当前CPU应该做更有用的工作，而不是运行idleproc这个“无所事事”的内核线程，所以把idleproc->need_resched设置为“1”，结合idleproc的执行主体--cpu_idle函数的实现，可以清楚看出如果当前idleproc在执行，则只要此标志为1，马上就调用schedule函数要求调度器切换其他进程执行。
+    */
+    idleproc->pid = 0;//idle是第零个进程
+    idleproc->state = PROC_RUNNABLE;//可执行
+    idleproc->kstack = (uintptr_t)bootstack;//分配给这个特殊的进程内核栈
+    idleproc->need_resched = 1;//只要此标志为1，马上就调用schedule函数要求调度器切换其他进程执行。
+    set_proc_name(idleproc, "idle");//设置名字
+    nr_process ++;//总进程数加一
+
+    current = idleproc;//现在在执行的进程
+
+    int pid = kernel_thread(init_main, "Hello world!!", 0);//创建新的内核线程，但是只有输出字符串的作用
+    if (pid <= 0) {
+        panic("create init_main failed.\n");
+    }
+
+    initproc = find_proc(pid);//查找线程
+    set_proc_name(initproc, "init");//充值线程名称
+
+    assert(idleproc != NULL && idleproc->pid == 0);
+    assert(initproc != NULL && initproc->pid == 1);
+}
+
+// find_proc - find proc frome proc hash_list according to pid
+struct proc_struct *
+find_proc(int pid) {
+    if (0 < pid && pid < MAX_PID) {
+        list_entry_t *list = hash_list + pid_hashfn(pid), *le = list;//这个地方没看懂，还要再问问
+        while ((le = list_next(le)) != list) {
+            struct proc_struct *proc = le2proc(le, hash_link);
+            if (proc->pid == pid) {
+                return proc;
+            }
+        }
+    }
+    return NULL;
+}
+
+#define pid_hashfn(x)       (hash32(x, HASH_SHIFT))
+```
+
+创建第一个线程init_proc
+
+第0个内核线程**主要工作是完成内核中各个子系统的初始化**，然后就通过执行cpu_idle函数开始过退休生活了。所以uCore接下来还需创建其他进程来完成各种工作，但idleproc内核子线程自己不想做，于是就**通过调用kernel_thread函数创建了一个内核线程init_main**。在实验四中，这个子内核线程的工作就是输出一些字符串，然后就返回了（参看init_main函数）。**但在后续的实验中，init_main的工作就是创建特定的其他内核线程或用户进程**（实验五涉及）。下面我们来分析一下创建内核线程的函数kernel_thread：
+
+```c++
+//中断帧
+struct trapframe {
+    struct pushregs tf_regs;
+    uint16_t tf_gs;
+    uint16_t tf_padding0;
+    uint16_t tf_fs;
+    uint16_t tf_padding1;
+    uint16_t tf_es;
+    uint16_t tf_padding2;
+    uint16_t tf_ds;
+    uint16_t tf_padding3;
+    uint32_t tf_trapno;
+    /* below here defined by x86 hardware */
+    uint32_t tf_err;
+    uintptr_t tf_eip;
+    uint16_t tf_cs;
+    uint16_t tf_padding4;
+    uint32_t tf_eflags;
+    /* below here only when crossing rings, such as from user to kernel */
+    uintptr_t tf_esp;
+    uint16_t tf_ss;
+    uint16_t tf_padding5;
+} __attribute__((packed));
+
+
+// kernel_thread - create a kernel thread using "fn" function
+// NOTE: the contents of temp trapframe tf will be copied to 
+//       proc->tf in do_fork-->copy_thread function
+int
+kernel_thread(int (*fn)(void *), void *arg, uint32_t clone_flags) {
+    struct trapframe tf;
+    memset(&tf, 0, sizeof(struct trapframe));
+    tf.tf_cs = KERNEL_CS;//代码段寄存器
+    tf.tf_ds = tf.tf_es = tf.tf_ss = KERNEL_DS;//数据段
+    tf.tf_regs.reg_ebx = (uint32_t)fn;//ebx为什么这么设置？，这个就是线程要执行的函数
+    tf.tf_regs.reg_edx = (uint32_t)arg;//arg是啥，为什么能输入字符串？函数的参数
+    tf.tf_eip = (uint32_t)kernel_thread_entry;//下一个执行的位置
+    return do_fork(clone_flags | CLONE_VM, 0, &tf);//真正的创建进程
+}
+```
+
+上面的kernel_thread函数采用了局部变量tf来放置保存内核线程的临时中断帧，**并把中断帧的指针传递给do_fork函数**，而do_fork函数会**调用copy_thread函数来在新创建的进程内核栈上专门给进程的中断帧分配一块空间**。
+
+给中断帧分配完空间后，就需要构造新进程的中断帧，具体过程是：首先给tf进行清零初始化，并**设置中断帧的代码段（tf.tf_cs）和数据段**(tf.tf_ds/tf_es/tf_ss)为内核空间的段（KERNEL_CS/KERNEL_DS），这实际上也说明了initproc内核线程在内核空间中执行。**而initproc内核线程从哪里开始执行呢？tf.tf_eip的指出了是kernel_thread_entry（位于kern/process/entry.S中）**，kernel_thread_entry是entry.S中实现的汇编函数，它做的事情很简单：
+
+从代码可以看出，kernel_thread_entry函数主要为内核线程的主体fn函数做了一个准备开始和结束运行的“壳”，并把函数fn的参数arg（保存在edx寄存器中）压栈，然后调用fn函数，把函数返回值eax寄存器内容压栈，调用do_exit函数退出线程执行。
+
+```assembly
+.text
+.globl kernel_thread_entry
+kernel_thread_entry:        # void kernel_thread(void)
+
+    pushl %edx              # push arg
+    call *%ebx              # call fn
+
+    pushl %eax              # save the return value of fn(arg)
+    call do_exit            # call do_exit to terminate current thread
+```
+
+然后就是Lab4-exercise2中需要实现的内容：
+
+do_fork是创建线程的主要函数。kernel_thread函数通过调用do_fork函数最终完成了内核线程的创建工作。下面我们来分析一下do_fork函数的实现（练习2）。do_fork函数主要做了以下6件事情：
+
+1. 分配并初始化进程控制块（alloc_proc函数）；
+
+2. 分配并初始化内核栈（setup_stack函数）；
+
+3. 根据clone_flag标志复制或共享进程内存管理结构（copy_mm函数）；
+
+4. 设置进程在内核（将来也包括用户态）正常运行和调度所需的中断帧和执行上下文（copy_thread函数）；
+
+5. 把设置好的进程控制块放入hash_list和proc_list两个全局进程链表中；
+
+6. 自此，进程已经准备好执行了，把进程状态设置为“就绪”态；
+
+7. 设置返回码为子进程的id号。
+
+这里需要注意的是，**如果上述前3步执行没有成功，则需要做对应的出错处理，把相关已经占有的内存释放掉。**copy_mm函数目前只是把current->mm设置为NULL，这是由于目前在实验四中只能创建内核线程，**proc->mm描述的是进程用户态空间的情况，所以目前mm还用不上。**
+
+```c++
+/* do_fork -     parent process for a new child process
+ * @clone_flags: used to guide how to clone the child process
+ * @stack:       the parent's user stack pointer. if stack==0, It means to fork a kernel thread.
+ * @tf:          the trapframe info, which will be copied to child process's proc->tf
+ */
+int
+do_fork(uint32_t clone_flags, uintptr_t stack, struct trapframe *tf) {
+    int ret = -E_NO_FREE_PROC;//没有多余的进程控制块了
+    struct proc_struct *proc;
+    if (nr_process >= MAX_PROCESS) {
+        goto fork_out;
+    }
+    ret = -E_NO_MEM;
+    //LAB4:EXERCISE2 YOUR CODE
+    /*
+     * Some Useful MACROs, Functions and DEFINEs, you can use them in below implementation.
+     * MACROs or Functions:
+     *   alloc_proc:   create a proc struct and init fields (lab4:exercise1)
+     *   setup_kstack: alloc pages with size KSTACKPAGE as process kernel stack
+     *   copy_mm:      process "proc" duplicate OR share process "current"'s mm according clone_flags
+     *                 if clone_flags & CLONE_VM, then "share" ; else "duplicate"
+     *   copy_thread:  setup the trapframe on the  process's kernel stack top and
+     *                 setup the kernel entry point and stack of process
+     *   hash_proc:    add proc into proc hash_list
+     *   get_pid:      alloc a unique pid for process
+     *   wakeup_proc:  set proc->state = PROC_RUNNABLE
+     * VARIABLES:
+     *   proc_list:    the process set's list
+     *   nr_process:   the number of process set
+     */
+
+    //    1. call alloc_proc to allocate a proc_struct
+    //    2. call setup_kstack to allocate a kernel stack for child process
+    //    3. call copy_mm to dup OR share mm according clone_flag
+    //    4. call copy_thread to setup tf & context in proc_struct
+    //    5. insert proc_struct into hash_list && proc_list
+    //    6. call wakeup_proc to make the new child process RUNNABLE
+    //    7. set ret vaule using child proc's pid
+    if ((proc = alloc_proc()) == NULL) {//分配进程控制块失败
+        goto fork_out;//分配失败，直接返回没有多余的控制块了
+    }
+
+    proc->parent = current;//父进程是当前进程
+
+    if (setup_kstack(proc) != 0) {//分配内核栈空间
+        goto bad_fork_cleanup_proc;
+    }
+    if (copy_mm(clone_flags, proc) != 0) {
+        goto bad_fork_cleanup_kstack;
+    }
+    copy_thread(proc, stack, tf);//完成中断栈以及上下文初始化
+
+    bool intr_flag;
+    local_intr_save(intr_flag);//这里也没懂
+    {
+        proc->pid = get_pid();
+        hash_proc(proc);
+        list_add(&proc_list, &(proc->list_link));
+        nr_process ++;
+    }
+    local_intr_restore(intr_flag);
+
+    wakeup_proc(proc);
+
+    ret = proc->pid;
+fork_out:
+    return ret;
+
+bad_fork_cleanup_kstack:
+    put_kstack(proc);
+bad_fork_cleanup_proc:
+    kfree(proc);
+    goto fork_out;
+}
+
+```
+
+分配进程栈空间：
+
+```c++
+// setup_kstack - alloc pages with size KSTACKPAGE as process kernel stack
+static int
+setup_kstack(struct proc_struct *proc) {
+    struct Page *page = alloc_pages(KSTACKPAGE);
+    if (page != NULL) {
+        proc->kstack = (uintptr_t)page2kva(page);//返回栈空间的内核虚拟地址
+        return 0;
+    }
+    return -E_NO_MEM;
+}
+#define KSTACKPAGE          2                           // # of pages in kernel stack
+```
+
+copy_mm:。copy_mm函数目前只是把current->mm设置为NULL，这是由于目前在实验四中只能创建内核线程，proc->mm描述的是进程用户态空间的情况，所以目前mm还用不上,看的出来这个函数的目的就是设置当前进程控制块的mm结构
+
+```c++
+//这个没太理解，重复或者共享通过clone_flags决定，是不是说内核态共享空间呢？
+// copy_mm - process "proc" duplicate OR share process "current"'s mm according clone_flags
+//         - if clone_flags & CLONE_VM, then "share" ; else "duplicate"
+static int
+copy_mm(uint32_t clone_flags, struct proc_struct *proc) {
+    assert(current->mm == NULL);
+    /* do nothing in this project */
+    return 0;
+}
+```
+
+copy_theard:
+
+此函数首先在内核堆栈的顶部设置中断帧大小的一块栈空间，并在此空间中拷贝在kernel_thread函数建立的临时中断帧的初始值，并进一步设置中断帧中的栈指针esp和标志寄存器eflags，特别是eflags设置了FL_IF标志，这表示此内核线程在执行过程中，能响应中断，打断当前的执行。执行到这步后，此进程的中断帧就建立好了
+
+```c++
+// copy_thread - setup the trapframe on the  process's kernel stack top and
+//             - setup the kernel entry point and stack of process
+static void
+copy_thread(struct proc_struct *proc, uintptr_t esp, struct trapframe *tf) {
+    proc->tf = (struct trapframe *)(proc->kstack + KSTACKSIZE) - 1;
+    *(proc->tf) = *tf;
+    proc->tf->tf_regs.reg_eax = 0;
+    proc->tf->tf_esp = esp;
+    proc->tf->tf_eflags |= FL_IF;
+
+    proc->context.eip = (uintptr_t)forkret;
+    proc->context.esp = (uintptr_t)(proc->tf);
+}
+```
+
+对于initproc而言，它的中断帧如下所示：
+
+```c++
+//所在地址位置
+initproc->tf= (proc->kstack+KSTACKSIZE) - sizeof (struct trapframe);//具体内容
+initproc->tf.tf CS = KERNEL CS;
+initproc->tf.tf ds = initproc->tf.tf es = initproc->tf.tf ss = KERNEL DS:
+initproc->tf.tf_regs.reg_ebx = (uint32 t)init main;
+initproc->tf.tf_regs.reg edx = (uint32 t) ADDRESS of "Helloworld!!"initproc->tf.tf eip = (uint32 t)kernel thread entry;
+initproc->tf.tf regs.reg_eax = 0;
+initproc->tf.tf esp = esp;
+initproc->tf.tf_eflags |= FL IF:
+```
+
+设置好中断帧后，最后就是设置initproc的进程上下文，（process context，也称执行现场）了。只有设置好执行现场后，一旦uCore调度器选择了initproc执行，就需要根据initproc-context中保存的执行现场来恢复initproc的执行。**这里设置了initproc的执行现场中主要的两个信息：上次停止执行时的下一条指令地址context.eip和上次停止执行时的堆栈地址context.esp。**其实initproc还没有执行过，所以这其实就是initproc实际执行的第一条指令地址和堆栈指针。可以看出，由于initproc的中断帧占用了实际给initproc分配的栈空间的顶部，所以initproc就只能把栈顶指针context.esp设置在initproc的中断帧的起始位置。根据context.eip的赋值，可以知道initproc实际开始执行的地方在forkret函数（主要完成do_fork函数返回的处理工作）处。至此，initproc内核线程已经做好准备执行了。
