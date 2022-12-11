@@ -79,7 +79,33 @@ idleproc内核线程的工作就是不停地查询，看是否有其他内核线
 
 ● context：进程的上下文，用于进程切换（参见switch.S）。在 uCore中，所有的进程在内核中也是相对独立的（例如独立的内核堆栈以及上下文等等）。**使用 context 保存寄存器的目的就在于在内核态中能够进行上下文之间的切换。**实际利用context进行上下文切换的函数是在kern/process/switch.S中定义switch_to。（这个地方不太懂，后面还要重点问、重点看）
 
-```c++
+现在似乎明白了一点点，干脆在这里就把上下文切换的步骤进行一个较为详细的说明。我们还是首先来看一下函数栈的调用过程：
+
+如果想要参考完整的博客的话可以参考一下这篇，写的还是比较完整的：[(1条消息) 调用函数时，栈的变化_Y_Hanxiao的博客-CSDN博客_函数调用栈的变化](https://blog.csdn.net/Y_Hanxiao/article/details/80505325)
+
+当我们调用函数的时候，首先从右向左把参数压栈（这里博客写错了）然后压入返回地址也就是完成函数调用，这个时候调用者任务就完成了，马上进入被调用者函数
+
+![](G:\code\OS\lab4\函数调用栈.png)
+
+所以说现在的栈空间应该是这样分布的：
+
+```
+|to.context   |高地址  
+|from.context |  
+|ret address  |<---esp  
+```
+
+当进入switch函数后，首先将esp+4位置的值赋值给eax，这样eax就拿到了from的context结构，然后此时esp指向返回地址，也就是from进程的下一条指令的位置，于是直接pop，然后按照顺序完成所有上下文的保存
+
+```
+switch_to(&(from->context), &(to->context))
+```
+
+然后需要做的就是把to中的context赋值给真正的寄存器，也是一样的步骤，但是具体的区别就是之前把返回地址push进去，也就是to的context结构中的eip位置的值，这样就完成了上下文的切换。后面也是+4找到to的context的地址是因为pop了ret之后esp就指向第一个参数了，所以加四就可以了
+
+然后注释里还说了就是为什么不保存eax会方便很多：问了lxz学长，解释是这样的：用一个通用寄存器直接指向二者的上下文结构汇很方便，如果连eax的值都需要保存就会麻烦一些。在这里简单的说了一下switch_to的实现，后面还会继续的说具体的上下文切换的全过程
+
+```assembly
 //不用保存所有的寄存器因为段寄存器在内核上下文中是一样的，保存通用寄存器这样就不用关心调用者保存这样的约束，但是不保存eax，因为这会简化切换上下文的工作。
 // Saved registers for kernel context switches.
 // Don't need to save all the %fs etc. segment registers,
@@ -102,7 +128,7 @@ struct context {
 
 switch_to代码：
 
-```c++
+```assembly
 .text
 .globl switch_to
 switch_to:                      # switch_to(from, to)
@@ -212,7 +238,7 @@ trap(struct trapframe *tf) {
 ● cr3: cr3 保存页表的物理地址，目的就是进程切换的时候方便直接使用 lcr3实现页表切换，避免每次都根据 mm 来计算 cr3。mm数据结构是用来实现用户空间的虚存管理的，但是内核线程没有用户空间，它执行的只是内核中的一小段代码（通常是一小段函数），所以它没有mm 结构，也就是NULL。**当某个进程是一个普通用户态进程的时候，PCB 中的 cr3 就是 mm中页表（pgdir）的物理地址**；而当它是内核线程的时候，**cr3 等于boot_cr3。而boot_cr3指向
 了uCore启动时建立好的饿内核虚拟空间的页目录表首地址。**
 
-● kstack:**每个线程都有一个内核栈，并且位于内核地址空间的不同位置**。**对于内核线程，该栈就是运行时的程序使用的栈；而对于普通进程，该栈是发生特权级改变的时候使保存被打断的硬件信息用的栈。**uCore在创建进程时分配了 2 个连续的物理页（参见memlayout.h中KSTACKSIZE的定义）作为内核栈的空间。这个栈很小，所以内核中的代码应该尽可能的紧凑，并且避免在栈上分配大的数据结构，以免栈溢出，导致系统崩溃。**kstack记录了分配给该进程/线程的内核栈的位置。**主要作用有以下几点。首先，**当内核准备从一个进程切换到另一个的时候**，**需要根据kstack 的值正确的设置好 tss** （可以回顾一下在实验一中讲述的 tss 在中断处理过程中的作用），以便在进程切换以后再发生中断时能够使用正确的栈。其次，内核栈位于内核地址空间，并且是不共享的（每个线程都拥有自己的内核栈），因此不受到 mm的管理，当进程退出的时候，**内核能够根据 kstack 的值快速定位栈的位置并进行回收**。uCore 的这种内核栈的设计借鉴的是 linux 的方法（但由于内存管理实现的差异，它实现的远不如 linux 的灵活），它使得每个线程的内核栈在不同的位置，这样从某种程度上方便调试，但同时也使得内核对栈溢出变得十分不敏感，因为一旦发生溢出，它极可能污染内核中其它的数据使得内核崩溃**。如果能够通过页表，将所有进程的内核栈映射到固定的地址上去，能够避免这种问题，但又会使得进程切换过程中对栈的修改变得相当繁琐。感兴趣的同学可以参考 linux kernel 的代码对此进行尝试。（所以说kstack就是一个地址，去那个地址就能找到栈）
+● kstack:**每个线程都有一个内核栈，并且位于内核地址空间的不同位置**。**对于内核线程，该栈就是运行时的程序使用的栈；而对于普通进程，该栈是发生特权级改变的时候使保存被打断的硬件信息用的栈。**记住前面这句话，这句话非常重要，对于普通进程，这个内核里的栈就是在发生特权级转换时存储信息所使用的栈，uCore在创建进程时分配了 2 个连续的物理页（参见memlayout.h中KSTACKSIZE的定义）作为内核栈的空间。这个栈很小，所以内核中的代码应该尽可能的紧凑，并且避免在栈上分配大的数据结构，以免栈溢出，导致系统崩溃。**kstack记录了分配给该进程/线程的内核栈的位置。**主要作用有以下几点。首先，**当内核准备从一个进程切换到另一个的时候**，**需要根据kstack 的值正确的设置好 tss** （可以回顾一下在实验一中讲述的 tss 在中断处理过程中的作用），以便在进程切换以后再发生中断时能够使用正确的栈。其次，内核栈位于内核地址空间，并且是不共享的（每个线程都拥有自己的内核栈），因此不受到 mm的管理，当进程退出的时候，**内核能够根据 kstack 的值快速定位栈的位置并进行回收**。uCore 的这种内核栈的设计借鉴的是 linux 的方法（但由于内存管理实现的差异，它实现的远不如 linux 的灵活），它使得每个线程的内核栈在不同的位置，这样从某种程度上方便调试，但同时也使得内核对栈溢出变得十分不敏感，因为一旦发生溢出，它极可能污染内核中其它的数据使得内核崩溃**。如果能够通过页表，将所有进程的内核栈映射到固定的地址上去，能够避免这种问题，但又会使得进程切换过程中对栈的修改变得相当繁琐。感兴趣的同学可以参考 linux kernel 的代码对此进行尝试。（所以说kstack就是一个地址，去那个地址就能找到栈）
 
 什么是TSS：[TSS (任务状态段)的作用及结构 - Gotogoo - 博客园 (cnblogs.com)](https://www.cnblogs.com/Gotogoo/p/5250622.html)
 
@@ -376,6 +402,7 @@ proc_init(void) {
 
     current = idleproc;//现在在执行的进程
 
+    //到这里上面的代码完成了idle函数的初始化，下面初始化第一个有用的进程initproc，具体的实现方法就是调用kernel_theard函数
     int pid = kernel_thread(init_main, "Hello world!!", 0);//创建新的内核线程，但是只有输出字符串的作用
     if (pid <= 0) {
         panic("create init_main failed.\n");
@@ -411,7 +438,7 @@ find_proc(int pid) {
 第0个内核线程**主要工作是完成内核中各个子系统的初始化**，然后就通过执行cpu_idle函数开始过退休生活了。所以uCore接下来还需创建其他进程来完成各种工作，但idleproc内核子线程自己不想做，于是就**通过调用kernel_thread函数创建了一个内核线程init_main**。在实验四中，这个子内核线程的工作就是输出一些字符串，然后就返回了（参看init_main函数）。**但在后续的实验中，init_main的工作就是创建特定的其他内核线程或用户进程**（实验五涉及）。下面我们来分析一下创建内核线程的函数kernel_thread：
 
 ```c++
-//中断帧
+//中断帧，这个看看就行了，在这个实验里好像也没啥大用
 struct trapframe {
     struct pushregs tf_regs;
     uint16_t tf_gs;
@@ -439,6 +466,7 @@ struct trapframe {
 // kernel_thread - create a kernel thread using "fn" function
 // NOTE: the contents of temp trapframe tf will be copied to 
 //       proc->tf in do_fork-->copy_thread function
+//这个函数创建了一个临时的中断帧，其中断帧的参数基本都来源于KERNEL的各个段的信息
 int
 kernel_thread(int (*fn)(void *), void *arg, uint32_t clone_flags) {
     struct trapframe tf;
@@ -447,16 +475,18 @@ kernel_thread(int (*fn)(void *), void *arg, uint32_t clone_flags) {
     tf.tf_ds = tf.tf_es = tf.tf_ss = KERNEL_DS;//数据段
     tf.tf_regs.reg_ebx = (uint32_t)fn;//ebx为什么这么设置？，这个就是线程要执行的函数
     tf.tf_regs.reg_edx = (uint32_t)arg;//arg是啥，为什么能输入字符串？函数的参数
-    tf.tf_eip = (uint32_t)kernel_thread_entry;//下一个执行的位置
+    tf.tf_eip = (uint32_t)kernel_thread_entry;//下一个执行的位置，注意这个tf结构的eip，这个eip才是能让initproc执行起来的那个eip。这里是需要明确的
     return do_fork(clone_flags | CLONE_VM, 0, &tf);//真正的创建进程
 }
 ```
 
 上面的kernel_thread函数采用了局部变量tf来放置保存内核线程的临时中断帧，**并把中断帧的指针传递给do_fork函数**，而do_fork函数会**调用copy_thread函数来在新创建的进程内核栈上专门给进程的中断帧分配一块空间**。
 
-给中断帧分配完空间后，就需要构造新进程的中断帧，具体过程是：首先给tf进行清零初始化，并**设置中断帧的代码段（tf.tf_cs）和数据段**(tf.tf_ds/tf_es/tf_ss)为内核空间的段（KERNEL_CS/KERNEL_DS），这实际上也说明了initproc内核线程在内核空间中执行。**而initproc内核线程从哪里开始执行呢？tf.tf_eip的指出了是kernel_thread_entry（位于kern/process/entry.S中）**，kernel_thread_entry是entry.S中实现的汇编函数，它做的事情很简单：
+给中断帧分配完空间后，就需要构造新进程的中断帧，具体过程是：首先给tf进行清零初始化，并**设置中断帧的代码段（tf.tf_cs）和数据段**(tf.tf_ds/tf_es/tf_ss)为内核空间的段（KERNEL_CS/KERNEL_DS），这实际上也说明了initproc内核线程在内核空间中执行。这个tf结构就是给initproc用的，后面会更仔细说这个tf有什么用。**而initproc内核线程从哪里开始执行呢？tf.tf_eip的指出了是kernel_thread_entry（位于kern/process/entry.S中）**，kernel_thread_entry是entry.S中实现的汇编函数，它做的事情很简单：
 
 从代码可以看出，kernel_thread_entry函数主要为内核线程的主体fn函数做了一个准备开始和结束运行的“壳”，并把函数fn的参数arg（保存在edx寄存器中）压栈，然后调用fn函数，把函数返回值eax寄存器内容压栈，调用do_exit函数退出线程执行。
+
+所以他具体干的事情就是调用ebx寄存器保存的地址那个位置的函数，然后用edx做参数，这个kernel_theard函数中我们对tf的赋值是一致的
 
 ```assembly
 .text
@@ -470,7 +500,7 @@ kernel_thread_entry:        # void kernel_thread(void)
     call do_exit            # call do_exit to terminate current thread
 ```
 
-然后就是Lab4-exercise2中需要实现的内容：
+然后kernel_theard调用了do_fork，也就是Lab4-exercise2中需要实现的内容：
 
 do_fork是创建线程的主要函数。kernel_thread函数通过调用do_fork函数最终完成了内核线程的创建工作。下面我们来分析一下do_fork函数的实现（练习2）。do_fork函数主要做了以下6件事情：
 
@@ -478,7 +508,7 @@ do_fork是创建线程的主要函数。kernel_thread函数通过调用do_fork�
 
 2. 分配并初始化内核栈（setup_stack函数）；
 
-3. 根据clone_flag标志复制或共享进程内存管理结构（copy_mm函数）；
+3. 根据clone_flag标志**复制或共享进程内存管理结构**（copy_mm函数）；
 
 4. 设置进程在内核（将来也包括用户态）正常运行和调度所需的中断帧和执行上下文（copy_thread函数）；
 
@@ -581,13 +611,14 @@ setup_kstack(struct proc_struct *proc) {
     }
     return -E_NO_MEM;
 }
+
 #define KSTACKPAGE          2                           // # of pages in kernel stack
 ```
 
 copy_mm:。copy_mm函数目前只是把current->mm设置为NULL，这是由于目前在实验四中只能创建内核线程，proc->mm描述的是进程用户态空间的情况，所以目前mm还用不上,看的出来这个函数的目的就是设置当前进程控制块的mm结构
 
 ```c++
-//这个没太理解，重复或者共享通过clone_flags决定，是不是说内核态共享空间呢？
+//根据clone_flag标志**复制或共享进程内存管理结构**
 // copy_mm - process "proc" duplicate OR share process "current"'s mm according clone_flags
 //         - if clone_flags & CLONE_VM, then "share" ; else "duplicate"
 static int
@@ -600,7 +631,7 @@ copy_mm(uint32_t clone_flags, struct proc_struct *proc) {
 
 copy_theard:
 
-此函数首先在内核堆栈的顶部设置中断帧大小的一块栈空间，并在此空间中拷贝在kernel_thread函数建立的临时中断帧的初始值，并进一步设置中断帧中的栈指针esp和标志寄存器eflags，特别是eflags设置了FL_IF标志，这表示此内核线程在执行过程中，能响应中断，打断当前的执行。执行到这步后，此进程的中断帧就建立好了
+此函数**首先在内核堆栈的顶部设置中断帧大小的一块栈空间**，并在此空间中拷贝在kernel_thread函数建立的临时中断帧的初始值，并进一步设置中断帧中的栈指针esp和标志寄存器eflags，特别是eflags设置了FL_IF标志，这表示此内核线程在执行过程中，能响应中断，打断当前的执行。执行到这步后，此进程的中断帧就建立好了
 
 ```c++
 // copy_thread - setup the trapframe on the  process's kernel stack top and
@@ -610,11 +641,11 @@ copy_thread(struct proc_struct *proc, uintptr_t esp, struct trapframe *tf) {
     proc->tf = (struct trapframe *)(proc->kstack + KSTACKSIZE) - 1;
     *(proc->tf) = *tf;
     proc->tf->tf_regs.reg_eax = 0;
-    proc->tf->tf_esp = esp;
+    proc->tf->tf_esp = esp;//不用管这个，这个没用，因为没有发生特权级的转换
     proc->tf->tf_eflags |= FL_IF;
 
     proc->context.eip = (uintptr_t)forkret;
-    proc->context.esp = (uintptr_t)(proc->tf);
+    proc->context.esp = (uintptr_t)(proc->tf);//所以说这个进程真正的esp在这里，由于没有切换特权级所以上面的tf上的esp，没有用，只有
 }
 ```
 
@@ -626,10 +657,206 @@ initproc->tf= (proc->kstack+KSTACKSIZE) - sizeof (struct trapframe);//具体内�
 initproc->tf.tf CS = KERNEL CS;
 initproc->tf.tf ds = initproc->tf.tf es = initproc->tf.tf ss = KERNEL DS:
 initproc->tf.tf_regs.reg_ebx = (uint32 t)init main;
-initproc->tf.tf_regs.reg edx = (uint32 t) ADDRESS of "Helloworld!!"initproc->tf.tf eip = (uint32 t)kernel thread entry;
+initproc->tf.tf_regs.reg edx = (uint32 t) ADDRESS of "Helloworld!!"
+initproc->tf.tf eip = (uint32 t)kernel thread entry;
 initproc->tf.tf regs.reg_eax = 0;
 initproc->tf.tf esp = esp;
 initproc->tf.tf_eflags |= FL IF:
 ```
 
 设置好中断帧后，最后就是设置initproc的进程上下文，（process context，也称执行现场）了。只有设置好执行现场后，一旦uCore调度器选择了initproc执行，就需要根据initproc-context中保存的执行现场来恢复initproc的执行。**这里设置了initproc的执行现场中主要的两个信息：上次停止执行时的下一条指令地址context.eip和上次停止执行时的堆栈地址context.esp。**其实initproc还没有执行过，所以这其实就是initproc实际执行的第一条指令地址和堆栈指针。可以看出，由于initproc的中断帧占用了实际给initproc分配的栈空间的顶部，所以initproc就只能把栈顶指针context.esp设置在initproc的中断帧的起始位置。根据context.eip的赋值，可以知道initproc实际开始执行的地方在forkret函数（主要完成do_fork函数返回的处理工作）处。至此，initproc内核线程已经做好准备执行了。
+
+所以说，initproc函数的context的设置为forkret，forkret的执行会根据tf的一些内容重新更新寄存器，尤其是eip
+
+然后是两个函数，这俩函数看起来像一对的，他们的作用也是相反的。我们来看看这几个函数的实现：这个地方问了问学长，可以理解为上锁，保证这一段代码是原子执行的。就像有些数据结构是要全局维护的，对这些结构进行操作，如果中间中断了被别的代码影响了的话，会影响本次的操作，这时就需要去给锁住
+
+```c++
+#define local_intr_save(x)      do { x = __intr_save(); } while (0) //我的理解这个就是如果现在允许中断就不允许中断
+#define local_intr_restore(x)   __intr_restore(x);//反之这个就是如果现在不允许中断那就打开中断
+#define FL_IF           0x00000200  // Interrupt Flag
+
+static inline bool
+__intr_save(void) {
+    if (read_eflags() & FL_IF) {
+        intr_disable();
+        return 1; //从允许变成不允许
+    }
+    return 0;
+}
+
+static inline void
+__intr_restore(bool flag) {
+    if (flag) {
+        intr_enable();//允许中断
+    }
+}
+
+/* intr_enable - enable irq interrupt */
+void
+intr_enable(void) {
+    sti();
+}
+
+/* intr_disable - disable irq interrupt */
+void
+intr_disable(void) {
+    cli();
+}
+
+```
+
+最后是list_entry和hash_entry
+
+```c++
+// hash_proc - add proc into proc hash_list
+//哈希链表算一下哈希值再连进去，proc list就直接连就好了 proc list 就是每一个进程连在一个双向链表中
+static void
+hash_proc(struct proc_struct *proc) {
+    list_add(hash_list + pid_hashfn(proc->pid), &(proc->hash_link));
+}
+
+ list_add(&proc_list, &(proc->list_link));
+```
+
+别忘了，要想让initproc执行还要把他叫醒，叫醒函数也很简单，只要他不是濒死的或者不是已经runnable就都可以叫醒
+
+```c++
+void
+wakeup_proc(struct proc_struct *proc) {
+    assert(proc->state != PROC_ZOMBIE && proc->state != PROC_RUNNABLE);
+    proc->state = PROC_RUNNABLE;
+}
+```
+
+至此，理论上exercise2就完成了，但其实还差一部分，比如context和tf为什么都要使用？上面初始化initproc的时候为什么要初始化一个context还要初始化一个tf呢？想要回答这些问题就必须认真完成下面的代码阅读以及实验手册的阅读。
+
+如何调度并执行内核线程 **initproc**？
+
+在uCore执行完proc_init函数后，就创建好了两个内核线程：idleproc和initproc，这时uCore当前的执行现场就是idleproc，等到执行到init函数的最后一个函数cpu_idle之前，uCore的所有初始化工作就结束了，idleproc将通过执行cpu_idle函数让出CPU，给其它内核线程执行，具体过程如下：
+
+首先，判断当前内核线程idleproc的need_resched是否不为0，回顾前面“创建第一个内核线程idleproc”中的描述，proc_init函数在初始化idleproc中，就把idleproc->need_resched置为1了，**所以会马上调用schedule函数找其他处于“就绪”态的进程执行。**
+
+```c
+// cpu_idle - at the end of kern_init, the first kernel thread idleproc will do below works
+void
+cpu_idle(void) {
+    while (1) {
+        if (current->need_resched) {
+            schedule();
+        }
+    }
+}
+```
+
+然后还是先把schedule的代码给出来：
+
+uCore在实验四中只实现了一个最简单的FIFO调度器，其核心就是schedule函数。它的执行逻辑很简单：
+
+1．设置当前内核线程current->need_resched为0； 
+
+2．在proc_list队列中查找下一个处于“就绪”态的线程或进程next； 
+
+3．找到这样的进程后，就调用proc_run函数，保存当前进程current的执行现场（进程上下文），恢复新进程的执行现场，完成进程切换。
+
+至此，新的进程next就开始执行了。由于在proc10中只有两个内核线程，且idleproc要让出
+
+CPU给initproc执行，我们可以看到schedule函数通过查找proc_list进程队列，只能找到一个处于“就绪”态的initproc内核线程。并通过proc_run和进一步的switch_to函数完成两个执行现场的切换。
+
+```c++
+void
+schedule(void) {
+    bool intr_flag;
+    list_entry_t *le, *last;
+    struct proc_struct *next = NULL;
+    local_intr_save(intr_flag);
+    {
+        current->need_resched = 0;//现在这个进程的赋值为0，也就是现在不需要调度
+        last = (current == idleproc) ? &proc_list : &(current->list_link);//这句话用来判断现在这个进程是不是idle进程，如果是的话直接拿到proc_list从头开始找，如果不是的话就拿到当前进程从当前进程开始找
+        le = last;
+        do {
+            if ((le = list_next(le)) != &proc_list) {//感觉这个是保证找到的是正常的能用的进程，因为proclist实际上没有嵌入到任何一个进程中
+                next = le2proc(le, list_link);
+                if (next->state == PROC_RUNNABLE) {//如果是准备就绪状态的话就选他执行
+                    break;
+                }
+            }
+        } while (le != last);//只要没找回来就一直找
+        if (next == NULL || next->state != PROC_RUNNABLE) {
+            next = idleproc;
+        }//根本就没找到，那还是运行idle等着回来再找
+        next->runs ++;//运行次数递增
+        if (next != current) {
+            proc_run(next);//执行这个进程
+        }
+    }
+    local_intr_restore(intr_flag);//恢复中断
+}
+
+```
+
+所以说最后要是想让进程执行起来还需要proc_run函数，这个函数的实现在下面：
+
+具体的流程主要分为四步：
+
+1. 让current指向next内核线程initproc；
+
+2. 设置任务状态段ts中特权态0下的栈顶指针esp0为next内核线程initproc的内核栈的栈顶，即next->kstack + KSTACKSIZE ；
+
+3. 设置CR3寄存器的值为next内核线程initproc的页目录表起始地址next->cr3，这实际上是完成进程间的页表切换；
+
+4. 由switch_to函数完成具体的两个线程的执行现场切换，即切换各个寄存器，当switch_to函数执行完“ret”指令后，就切换到initproc执行了。
+
+```c
+// proc_run - make process "proc" running on cpu
+// NOTE: before call switch_to, should load  base addr of "proc"'s new PDT
+void
+proc_run(struct proc_struct *proc) {
+    if (proc != current) {//要调度么，不能再启动当前的进程
+        bool intr_flag;
+        struct proc_struct *prev = current, *next = proc;//拿到两个进程的进程控制块
+        local_intr_save(intr_flag);//保证操作的原子性
+        {
+            current = proc;
+            load_esp0(next->kstack + KSTACKSIZE);//重置esp0寄存器，如果是cr3的中断的话会有用
+            lcr3(next->cr3);//把cr3寄存器的值更新了
+            switch_to(&(prev->context), &(next->context));//切换上下文
+        }
+        local_intr_restore(intr_flag);
+    }
+}
+```
+
+在第二步设置任务状态段ts中特权态0下的栈顶指针esp0的目的是建立好内核线程或将来用户线程在执行特权态切换（从特权态0<-->特权态3，或从特权态3<-->特权态3）时能够正确定位处于特权态0时进程的内核栈的栈顶，而这个**栈顶其实放了一个trapframe结构的内存空间**。如果是在特权态3发生了中断/异常/系统调用，则CPU会从特权态3-->特权态0，**且CPU从此栈顶（当前被打断进程的内核栈顶）开始压栈来保存被中断/异常/系统调用打断的用户态执创建并执行内核线程现场；**
+
+如果是在特权态0发生了中断/异常/系统调用，则CPU会从从当前内核栈指针esp所指的位置开始压栈保存被中断/异常/系统调用打断的内核态执行现场。反之，当执行完对中断/异常/系统调用打断的处理后，最后会执行一个“iret”指令。在执行此指令之前，CPU的当前栈指针esp一定指向上次产生中断/异常/系统调用时CPU保存的被打断的指令地址CS和EIP，“iret”指令会根据ESP所指的保存的址CS和EIP恢复到上次被打断的地方继续执行。
+
+在页表设置方面，**由于idleproc和initproc都是共用一个内核页表boot_cr3，所以此时第三步其实没用**，但考虑到以后的进程有各自的页表，其起始地址各不相同，只有完成页表切换，才能确保新的进程能够正常执行。
+
+上面说完了中间两步，然后就说说这个switch_to语句，这个语句咱们在上面也写过，但是还是再看实验指导书说一遍，重复的就不在这里说了，直接说上面没说到的：
+
+倒数第二条汇编指令“pushl 0(%eax)”其实把context中保存的下一个进程要执行的指令地址context.eip放到了堆栈顶，这样接下来执行最后一条指令“ret”时，会把栈顶的内容赋值给EIP寄存器，这样就切换到下一个进程执行了，即当前进程已经是下一创建并执行内核进程了。
+
+uCore会执行进程切换，让initproc执行。在对initproc进行初始化时，设置了initproc->context.eip = (uintptr_t)forkret，这样，当执行switch_to函数并返回后，initproc将执行其实际上的执行入口地址forkret。而forkret会调用位于kern/trap/trapentry.S中的forkrets函数执行，具体代码如下：
+
+```assembly
+.globl __trapret
+__trapret:
+# restore registers from stack
+popal
+# restore %ds and %es
+popl %es
+popl %ds
+# get rid of the trap number and error code
+addl $0x8, %esp
+iret
+
+.globl forkrets
+forkrets:
+# set stack to this new process's trapframe
+movl 4(%esp), %esp //把esp指向当前进程的中断帧
+jmp __trapret
+```
+
+可以看出，forkrets函数首先把esp指向当前进程的中断帧，从_trapret开始执行到iret前，esp指向了current->tf.tf_eip，而如果此时执行的是initproc，**则current-tf.tf_eip=kernel_thread_entry，initproc->tf.tf_cs = KERNEL_CS**，**所以当执行完iret后，就开始在内核中执行kernel_thread_entry函数了**，而initproc->tf.tf_regs.reg_ebx = init_main，所以在kernl_thread_entry中执行“call %ebx”后，就开始执行initproc的主体了。Initprocde的主体函数很简单就是输出一段字符串，然后就返回到kernel_tread_entry函数，并进一步调用do_exit执行退出操作了。
+
+我简单总结一下就是真正执行的在内核的第一条执行放在context里，然后context执行的其实是对do_fork设置的值的处理，而真正能够启动进程的eip还是保存在tf里面，这就需要用iret来完成。我感觉就是为了让内核的切换流程和用户态的进程切换流程一样才这么搞的。
